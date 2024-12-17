@@ -1,0 +1,31 @@
+name: Manual Approval Workflow
+
+# Trigger this workflow on push to the 'staging' branch
+on:
+  push:
+    branches:
+      - staging
+
+jobs:
+  approval:
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout the repository's code
+      - name: Checkout Code
+        uses: actions/checkout@v2
+
+      # Deploy to staging (dummy step here)
+      - name: Deploy to Staging
+        run: |
+          echo "Deploying code to staging environment..."
+
+      # Manual approval step
+      - name: Wait for approval to deploy to production
+        uses: trstringer/manual-approval@v1
+        with:
+          secret: ${{ github.token }}
+          approvers: user1,user2,org-team1  # Replace with real GitHub usernames or teams
+          minimum-approvals: 1
+          issue-title: "Approve deployment to production"
+          issue-body: "Please approve or deny the deployment of the latest code to production."
+          exclude-workflow-initiator-as-approver: true
