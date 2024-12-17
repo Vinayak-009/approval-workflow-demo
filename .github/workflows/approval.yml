@@ -23,7 +23,7 @@ jobs:
       - name: Wait for approval to deploy to production
         uses: trstringer/manual-approval@v1
         with:
-          secret: ${{ github.token }}
+          secret: ${{ new_approve_secret }}
           approvers: Harish-0012  # Replace with real GitHub usernames or teams
           minimum-approvals: 1
           issue-title: "Approve deployment to production"
