@@ -24,7 +24,7 @@ jobs:
         uses: trstringer/manual-approval@v1
         with:
           secret: ${{ github.token }}
-          approvers: user1,user2,org-team1  # Replace with real GitHub usernames or teams
+          approvers: Harish-0012  # Replace with real GitHub usernames or teams
           minimum-approvals: 1
           issue-title: "Approve deployment to production"
           issue-body: "Please approve or deny the deployment of the latest code to production."
