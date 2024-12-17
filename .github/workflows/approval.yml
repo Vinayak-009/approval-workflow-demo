@@ -3,8 +3,8 @@ name: Manual Approval Workflow
 # Trigger this workflow on push to the 'staging' branch
 on:
   push:
-    branches:
-      - staging
+    branches: main
+      - 
 
 jobs:
   approval:
