@@ -6,10 +6,19 @@ terraform {
       version = "~> 4.0"  # Consider using the latest version
     }
   }
-  backend "gcs" {
-      bucket = "your-bucket-name-here" #replace this with the name of the gcs bucket 
-      prefix = "terraform/state"
-    }
+}
+
+resource "google_storage_bucket" "default" {
+  name     = "${random_id.default.hex}-terraform-remote-backend"  # Unique name
+  location = "US"
+
+  force_destroy               = false
+  public_access_prevention    = "enforced"
+  uniform_bucket_level_access = true
+
+  versioning {
+    enabled = true
+  }
 }
 
 resource "google_compute_instance" "default" {
@@ -23,23 +32,10 @@ resource "google_compute_instance" "default" {
   }
   network_interface {
     network = "default"
-    access_config {
-    }
+    access_config {}
   }
 }
 
-resource "google_storage_bucket" "default" {
-  name     = "${random_id.default.hex}-terraform-remote-backend"
-  location = "US"
-
-  force_destroy               = false
-  public_access_prevention    = "enforced"
-  uniform_bucket_level_access = true
-
-  versioning {
-    enabled = true
-  }
-}
 resource "random_id" "default" {
-  byte_length = 8
+  byte_length = 8  # Generates a random string
 }
