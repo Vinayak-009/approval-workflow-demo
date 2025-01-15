@@ -1,31 +1,78 @@
-name: Manual Approval Workflow
+name: Terraform Apply with Workload Identity Federation and Slack Approval
 
-# Trigger this workflow on push to the 'main' branch
 on:
   push:
     branches:
-      - main  # The workflow will trigger on pushes to the 'main' branch
+      - main  # Trigger workflow when pushing to main branch
 
 jobs:
-  approval:
-    runs-on: ubuntu-latest
+  terraform-apply:
+    runs-on: ubuntu-latest  # Use Ubuntu runner
+
+    permissions:
+      contents: 'read'  # Read access to repository contents
+      id-token: 'write'  # Permission to issue an ID token for Workload Identity Federation
+
     steps:
-      # Checkout the repository's code
-      - name: Checkout Code
-        uses: actions/checkout@v2
+    # Step 1: Checkout code
+    - name: Checkout code
+      uses: actions/checkout@v2
 
-      # Deploy to staging (dummy step here)
-      - name: Deploy to Staging
-        run: |
-          echo "Deploying code to staging environment..."
+    # Step 2: Authenticate with Google Cloud using Workload Identity Federation
+    - id: auth
+      uses: google-github-actions/auth@v2
+      with:
+        # Configure your Workload Identity Federation provider
+        workload_identity_provider: 'projects/554761590655/locations/global/workloadIdentityPools/new-pool/providers/github-oidc-provider'  # Replace with your actual provider
+        # The service account for impersonation
+        service_account: 'github-actions-sa@no-migration.iam.gserviceaccount.com'  # Replace with your actual service account
 
-      # Manual approval step
-      - name: Wait for approval to deploy to production
-        uses: trstringer/manual-approval@v1
-        with:
-          secret: ${{ secrets.NEW_APPROVE_SECRET }}  # Use the secret token for approval
-          approvers: Harish-0012  # Replace with real GitHub usernames or teams
-          minimum-approvals: 1
-          issue-title: "Approve deployment to production"
-          issue-body: "Please approve or deny the deployment of the latest code to production."
-          exclude-workflow-initiator-as-approver: true
+    # Step 3: Initialize Terraform
+    - name: Initialize Terraform
+      run: terraform init
+
+    # Step 4: Plan Terraform changes
+    - name: Terraform Plan
+      id: terraform_plan
+      run: terraform plan -out=tfplan | tee terraform_plan.txt
+
+    # Step 5: Extract only the changes (added, modified, removed)
+    - name: Extract Terraform Changes
+      id: extract_changes
+      run: |
+        # Extract the lines with changes (additions, modifications, deletions)
+        grep -E '(\+|\-|\~)' terraform_plan.txt > terraform_changes.txt
+        cat terraform_changes.txt
+
+    # Step 6: Send Slack approval request with only the changes
+    - name: Request Slack Approval
+      id: slack-approval
+      uses: varu3/slack-approval@main
+      env:
+        SLACK_APP_TOKEN: ${{ secrets.SLACK_APP_TOKEN }}
+        SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        SLACK_SIGNING_SECRET: ${{ secrets.SLACK_SIGNING_SECRET }}
+        SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+      with:
+        message: |
+          Terraform changes are ready for review. Please approve or deny the following changes:
+          ```bash
+          $(cat terraform_changes.txt)
+          ```
+      timeout-minutes: 15  # Set timeout for waiting for approval (e.g., 15 minutes)
+
+    # Step 7: Conditional Terraform Apply based on Slack approval
+    - name: Terraform Apply
+      if: steps.slack-approval.outputs.approved == 'true'  # Only apply if approved on Slack
+      run: terraform apply tfplan
+
+    # Step 8: Notify Denial on Slack if approval was denied
+    - name: Notify Denial
+      if: steps.slack-approval.outputs.approved == 'false'  # If denied, notify on Slack
+      run: |
+        echo "Terraform apply was denied on Slack. No changes were made."
+        # Optionally send a denial message to Slack
+        curl -X POST -H 'Content-type: application/json' \
+        --data '{"text":"Terraform apply was denied by the reviewer. No changes were applied."}' \
+        https://slack.com/api/chat.postMessage \
+        -H "Authorization: Bearer ${{ secrets.SLACK_BOT_TOKEN }}"
