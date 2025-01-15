@@ -13,72 +13,72 @@ jobs:
       contents: 'read'  # Read access to repository contents
       id-token: 'write'  # Permission to issue an ID token for Workload Identity Federation
 
+    env:
+      TF_VERSION: 1.4.5  # Set terraform version here
+
     steps:
-    # Step 1: Checkout code
-    - name: Checkout code
-      uses: actions/checkout@v2
+      # Step 1: Checkout code
+      - name: Checkout code
+        uses: actions/checkout@v2
 
-    # Step 2: Authenticate with Google Cloud using Workload Identity Federation
-    - id: auth
-      uses: google-github-actions/auth@v2
-      with:
-        # Configure your Workload Identity Federation provider
-        workload_identity_provider: 'projects/554761590655/locations/global/workloadIdentityPools/new-pool/providers/github-oidc-provider'  # Replace with your actual provider
-        # The service account for impersonation
-        service_account: 'github-actions-sa@no-migration.iam.gserviceaccount.com'  # Replace with your actual service account
+      # Step 2: Authenticate with Google Cloud using Workload Identity Federation
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: 'projects/554761590655/locations/global/workloadIdentityPools/new-pool/providers/github-oidc-provider'
+          service_account: 'github-actions-sa@no-migration.iam.gserviceaccount.com'
 
-    # Step 3: Install Terraform
-    - name: Install Terraform
-      uses: hashicorp/setup-terraform@v1
-      with:
-        terraform_version: 1.4.5  # Specify the version of Terraform you want to use
+      # Step 3: Install Terraform
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v1
+        with:
+          terraform_version: ${{ env.TF_VERSION }}  # Use the version set in env vars.
 
-    # Step 4: Initialize Terraform
-    - name: Initialize Terraform
-      run: terraform init
+      # Step 4: Initialize Terraform
+      - name: Initialize Terraform
+        run: terraform init
 
-    # Step 5: Plan Terraform changes
-    - name: Terraform Plan
-      id: terraform_plan
-      run: terraform plan -out=tfplan | tee terraform_plan.txt
+      # Step 5: Plan Terraform changes
+      - name: Terraform Plan
+        id: terraform_plan
+        run: terraform plan -out=tfplan | tee terraform_plan.txt
 
-    # Step 6: Extract only the changes (added, modified, removed)
-    - name: Extract Terraform Changes
-      id: extract_changes
-      run: |
-        # Extract the lines with changes (additions, modifications, deletions)
-        grep -E '(\+|\-|\~)' terraform_plan.txt > terraform_changes.txt
-        cat terraform_changes.txt
+      # Step 6: Extract only the changes (added, modified, removed)
+      - name: Extract Terraform Changes
+        id: extract_changes
+        run: |
+          grep -E '(\+|\-|\~)' terraform_plan.txt > terraform_changes.txt
+          # Provide some feedback for debugging purposes
+          if [ -s "terraform_changes.txt" ]; then
+             echo "Terraform changes:"
+             cat terraform_changes.txt
+          else
+             echo "No Terraform changes detected"
+          fi
 
-    # Step 7: Send Slack approval request with only the changes
-    - name: Request Slack Approval
-      id: slack-approval
-      uses: varu3/slack-approval@main
-      env:
-        SLACK_APP_TOKEN: ${{ secrets.SLACK_APP_TOKEN }}
-        SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-        SLACK_SIGNING_SECRET: ${{ secrets.SLACK_SIGNING_SECRET }}
-        SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
-      with:
-        #message: |
-          #Terraform changes are ready for review. Please approve or deny the following changes:
-          #```bash
-          #$(cat terraform_changes.txt)
-          #```
-      timeout-minutes: 15  # Set timeout for waiting for approval (e.g., 15 minutes)
+      # Step 7: Send Slack approval request with only the changes
+      - name: Request Slack Approval
+        id: slack-approval
+        uses: varu3/slack-approval@main
+        env:
+          SLACK_APP_TOKEN: ${{ secrets.SLACK_APP_TOKEN }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_SIGNING_SECRET: ${{ secrets.SLACK_SIGNING_SECRET }}
+          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+        timeout-minutes: 15  # Set timeout for waiting for approval (e.g., 15 minutes)
 
-    # Step 8: Conditional Terraform Apply based on Slack approval
-    - name: Terraform Apply
-      if: steps.slack-approval.outputs.approved == 'true'  # Only apply if approved on Slack
-      run: terraform apply tfplan
+      # Step 8: Conditional Terraform Apply based on Slack approval
+      - name: Terraform Apply
+        if: steps.slack-approval.outputs.approved == 'true'  # Only apply if approved on Slack
+        run: terraform apply tfplan
 
-    # Step 9: Notify Denial on Slack if approval was denied
-    - name: Notify Denial
-      if: steps.slack-approval.outputs.approved == 'false'  # If denied, notify on Slack
-      run: |
-        echo "Terraform apply was denied on Slack. No changes were made."
-        # Optionally send a denial message to Slack
-        curl -X POST -H 'Content-type: application/json' \
-        --data '{"text":"Terraform apply was denied by the reviewer. No changes were applied."}' \
-        https://slack.com/api/chat.postMessage \
-        -H "Authorization: Bearer ${{ secrets.SLACK_BOT_TOKEN }}"
+      # Step 9: Notify Denial on Slack if approval was denied
+      - name: Notify Denial
+        if: steps.slack-approval.outputs.approved == 'false'  # If denied, notify on Slack
+        run: |
+          echo "Terraform apply was denied on Slack. No changes were made."
+          # Optionally send a denial message to Slack
+          curl -X POST -H 'Content-type: application/json' \
+          --data '{"text":"Terraform apply was denied by the reviewer. No changes were applied."}' \
+          https://slack.com/api/chat.postMessage \
+          -H "Authorization: Bearer ${{ secrets.SLACK_BOT_TOKEN }}"
