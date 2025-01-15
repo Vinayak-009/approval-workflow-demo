@@ -60,11 +60,11 @@ jobs:
         SLACK_SIGNING_SECRET: ${{ secrets.SLACK_SIGNING_SECRET }}
         SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
       with:
-        message: |
-          Terraform changes are ready for review. Please approve or deny the following changes:
-          ```bash
-          $(cat terraform_changes.txt)
-          ```
+        #message: |
+          #Terraform changes are ready for review. Please approve or deny the following changes:
+          #```bash
+          #$(cat terraform_changes.txt)
+          #```
       timeout-minutes: 15  # Set timeout for waiting for approval (e.g., 15 minutes)
 
     # Step 8: Conditional Terraform Apply based on Slack approval
