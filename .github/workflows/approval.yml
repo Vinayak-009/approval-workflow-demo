@@ -27,16 +27,22 @@ jobs:
         # The service account for impersonation
         service_account: 'github-actions-sa@no-migration.iam.gserviceaccount.com'  # Replace with your actual service account
 
-    # Step 3: Initialize Terraform
+    # Step 3: Install Terraform
+    - name: Install Terraform
+      uses: hashicorp/setup-terraform@v1
+      with:
+        terraform_version: 1.4.5  # Specify the version of Terraform you want to use
+
+    # Step 4: Initialize Terraform
     - name: Initialize Terraform
       run: terraform init
 
-    # Step 4: Plan Terraform changes
+    # Step 5: Plan Terraform changes
     - name: Terraform Plan
       id: terraform_plan
       run: terraform plan -out=tfplan | tee terraform_plan.txt
 
-    # Step 5: Extract only the changes (added, modified, removed)
+    # Step 6: Extract only the changes (added, modified, removed)
     - name: Extract Terraform Changes
       id: extract_changes
       run: |
@@ -44,7 +50,7 @@ jobs:
         grep -E '(\+|\-|\~)' terraform_plan.txt > terraform_changes.txt
         cat terraform_changes.txt
 
-    # Step 6: Send Slack approval request with only the changes
+    # Step 7: Send Slack approval request with only the changes
     - name: Request Slack Approval
       id: slack-approval
       uses: varu3/slack-approval@main
@@ -61,12 +67,12 @@ jobs:
           ```
       timeout-minutes: 15  # Set timeout for waiting for approval (e.g., 15 minutes)
 
-    # Step 7: Conditional Terraform Apply based on Slack approval
+    # Step 8: Conditional Terraform Apply based on Slack approval
     - name: Terraform Apply
       if: steps.slack-approval.outputs.approved == 'true'  # Only apply if approved on Slack
       run: terraform apply tfplan
 
-    # Step 8: Notify Denial on Slack if approval was denied
+    # Step 9: Notify Denial on Slack if approval was denied
     - name: Notify Denial
       if: steps.slack-approval.outputs.approved == 'false'  # If denied, notify on Slack
       run: |
