@@ -52,20 +52,24 @@ jobs:
         run: |
           terraform_changes=$(cat terraform_changes.txt)
 
-          # Escape special characters like newline, plus, minus, tilde, etc.
-          terraform_changes_escaped=$(echo "$terraform_changes" | sed 's/+/\\+/g' | sed 's/-/\\-/g' | sed 's/~//g' | sed 's/\r//g' | sed 's/\n/\\n/g')
+          # remove newlines and the other characters in the terraform plan output
+          terraform_changes_cleaned=$(echo "$terraform_changes" | sed 's/[~+-]//g' | tr -d '\n')
           
-          MESSAGE=$(printf '{"cards": [ { "header": { "title": "Terraform Approval", "subtitle": "Please review changes" }, "sections": [ { "widgets": [ {"textParagraph": { "text": "Terraform changes:\n```%s```" }} ] }, { "widgets": [ { "textParagraph": { "text": "Please approve the deployment [here](https://github.com/%s/actions/runs/%s)"}} ] } ] } ]}' "$terraform_changes_escaped" "${{ github.repository }}" "${{ github.run_id }}")
-          
-          # Write the message to the environment file
-          echo "MESSAGE=$MESSAGE" >> $GITHUB_ENV
+          MESSAGE=$(printf '{"cards": [ { "header": { "title": "Terraform Approval", "subtitle": "Please review changes" }, "sections": [ { "widgets": [ {"textParagraph": { "text": "Terraform changes:\n```%s```" }} ] }, { "widgets": [ { "textParagraph": { "text": "Please approve the deployment [here](https://github.com/%s/actions/runs/%s)"}} ] } ] } ]}' "$terraform_changes_cleaned" "${{ github.repository }}" "${{ github.run_id }}")
+
+          # Base64 Encode the MESSAGE
+           ENCODED_MESSAGE=$(echo "$MESSAGE" | base64)
+           echo "ENCODED_MESSAGE=$ENCODED_MESSAGE" >> $GITHUB_ENV
 
       - name: Send Google Chat Approval Request
         run: |
+          #Base64 decode the message and store it
+          DECODED_MESSAGE=$(echo "${{ env.ENCODED_MESSAGE }}" | base64 --decode)
+
           output=$(curl --max-time 10 -X POST \
           -H 'Content-Type: application/json' \
           -H "Authorization: Bearer ${{ secrets.GOOGLE_CHAT_TOKEN }}" \
-          -d "${{ env.MESSAGE }}" "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
+          -d "$DECODED_MESSAGE" "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
           if [ $? -ne 0 ]; then
             echo "Error sending Google Chat message: $output"
             exit 1
@@ -82,15 +86,19 @@ jobs:
           else
             MESSAGE='{"cards": [ { "header": { "title": "Deployment Notification", "subtitle": "Deployment failed" }, "sections": [ { "widgets": [ { "textParagraph": { "text": "Terraform apply failed. Please check the logs." }} ] } ] } ]}'
           fi
-          echo "MESSAGE=$MESSAGE" >> $GITHUB_ENV
+          # Base64 encode the Message
+          ENCODED_MESSAGE=$(echo "$MESSAGE" | base64)
+          echo "ENCODED_MESSAGE=$ENCODED_MESSAGE" >> $GITHUB_ENV
 
       - name: Send Google Chat Post-Deployment Notification
         if: success()
         run: |
+           #Base64 decode the message and store it
+          DECODED_MESSAGE=$(echo "${{ env.ENCODED_MESSAGE }}" | base64 --decode)
           output=$(curl --max-time 10 -X POST \
             -H 'Content-Type: application/json' \
             -H "Authorization: Bearer ${{ secrets.GOOGLE_CHAT_TOKEN }}" \
-            -d "${{ env.MESSAGE }}" "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
+            -d "$DECODED_MESSAGE" "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
           if [ $? -ne 0 ]; then
             echo "Error sending Google Chat message: $output"
             exit 1
@@ -99,10 +107,12 @@ jobs:
       - name: Send Google Chat Post-Deployment Notification (Failure)
         if: failure()
         run: |
+          #Base64 decode the message and store it
+          DECODED_MESSAGE=$(echo "${{ env.ENCODED_MESSAGE }}" | base64 --decode)
           output=$(curl --max-time 10 -X POST \
             -H 'Content-Type: application/json' \
             -H "Authorization: Bearer ${{ secrets.GOOGLE_CHAT_TOKEN }}" \
-            -d "${{ env.MESSAGE }}" "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
+            -d "$DECODED_MESSAGE" "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
           if [ $? -ne 0 ]; then
             echo "Error sending Google Chat message: $output"
             exit 1
