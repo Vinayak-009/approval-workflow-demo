@@ -1,84 +1,86 @@
-name: Terraform Apply with Workload Identity Federation and Slack Approval
+name: Terraform Deployment with Google Chat Approval
 
 on:
   push:
     branches:
-      - main  # Trigger workflow when pushing to main branch
+      - main # or any other branch you use for deployment
 
 jobs:
-  terraform-apply:
-    runs-on: ubuntu-latest  # Use Ubuntu runner
-
+  terraform-deploy-with-approval:
+    runs-on: ubuntu-latest
     permissions:
-      contents: 'read'  # Read access to repository contents
-      id-token: 'write'  # Permission to issue an ID token for Workload Identity Federation
-
-    env:
-      TF_VERSION: 1.4.5  # Set terraform version here
+        contents: 'read'
+        id-token: 'write'
+    environment:
+      name: production
 
     steps:
-      # Step 1: Checkout code
-      - name: Checkout code
-        uses: actions/checkout@v2
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
-      # Step 2: Authenticate with Google Cloud using Workload Identity Federation
-      - name: Authenticate to Google Cloud
+      - name: Configure GCP Credentials
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: 'projects/554761590655/locations/global/workloadIdentityPools/new-pool/providers/github-oidc-provider'
-          service_account: 'github-actions-sa@no-migration.iam.gserviceaccount.com'
+           workload_identity_provider: 'projects/554761590655/locations/global/workloadIdentityPools/new-pool/providers/github-oidc-provider'
+           service_account: 'github-actions-sa@no-migration.iam.gserviceaccount.com'
 
-      # Step 3: Install Terraform
-      - name: Install Terraform
+      - name: Set up Terraform
         uses: hashicorp/setup-terraform@v1
         with:
-          terraform_version: ${{ env.TF_VERSION }}  # Use the version set in env vars.
+          terraform_version: 1.4.5  # Specify your desired version
 
-      # Step 4: Initialize Terraform
-      - name: Initialize Terraform
+      - name: Terraform Init
         run: terraform init
-
-      # Step 5: Plan Terraform changes
+      
       - name: Terraform Plan
         id: terraform_plan
         run: terraform plan -out=tfplan | tee terraform_plan.txt
 
-      # Step 6: Extract only the changes (added, modified, removed)
       - name: Extract Terraform Changes
         id: extract_changes
         run: |
           grep -E '(\+|\-|\~)' terraform_plan.txt > terraform_changes.txt
-          # Provide some feedback for debugging purposes
           if [ -s "terraform_changes.txt" ]; then
-             echo "Terraform changes:"
-             cat terraform_changes.txt
+            echo "Terraform changes:"
+            cat terraform_changes.txt
           else
              echo "No Terraform changes detected"
           fi
-
-      # Step 7: Send Slack approval request with only the changes
-      - name: Request Slack Approval
-        id: slack-approval
-        uses: varu3/slack-approval@main
-        env:
-          SLACK_APP_TOKEN: ${{ secrets.SLACK_APP_TOKEN }}
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-          SLACK_SIGNING_SECRET: ${{ secrets.SLACK_SIGNING_SECRET }}
-          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
-        timeout-minutes: 15  # Set timeout for waiting for approval (e.g., 15 minutes)
-
-      # Step 8: Conditional Terraform Apply based on Slack approval
-      - name: Terraform Apply
-        if: steps.slack-approval.outputs.approved == 'true'  # Only apply if approved on Slack
-        run: terraform apply tfplan
-
-      # Step 9: Notify Denial on Slack if approval was denied
-      - name: Notify Denial
-        if: steps.slack-approval.outputs.approved == 'false'  # If denied, notify on Slack
+      - name: Construct Google Chat Message
+        id: construct-message
         run: |
-          echo "Terraform apply was denied on Slack. No changes were made."
-          # Optionally send a denial message to Slack
-          curl -X POST -H 'Content-type: application/json' \
-          --data '{"text":"Terraform apply was denied by the reviewer. No changes were applied."}' \
-          https://slack.com/api/chat.postMessage \
-          -H "Authorization: Bearer ${{ secrets.SLACK_BOT_TOKEN }}"
+            MESSAGE=$(printf '{"cards": [ { "header": { "title": "Terraform Approval", "subtitle": "Please review changes" }, "sections": [ { "widgets": [ {"textParagraph": { "text": "Terraform changes:\n```\n$(cat terraform_changes.txt)\n```" }} ] }, { "widgets": [ { "textParagraph": { "text": "Please approve the deployment [here](https://github.com/%s/actions/runs/%s)"}} ] } ] } ]}' "${{ github.repository }}" "${{ github.run_id }}")
+            echo "message=$MESSAGE" >> $GITHUB_OUTPUT
+
+      - name: Send Google Chat Approval Request
+        run: |
+            output=$(curl --max-time 10 -X POST \
+            -H 'Content-Type: application/json' \
+             -H "Authorization: Bearer ${{ secrets.GOOGLE_CHAT_TOKEN }}" \
+            -d '${{ steps.construct-message.outputs.message }}' "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
+            if [ $? -ne 0 ]; then
+              echo "Error sending Google Chat message: $output"
+              exit 1
+            fi
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
+      - name: Construct Google Chat Post-Deployment Notification
+        id: construct-post-deploy-message
+        run: |
+         if ${{ success() }}; then
+            MESSAGE=$(printf '{"cards": [ { "header": { "title": "Deployment Notification", "subtitle": "Deployment finished" }, "sections": [ { "widgets": [ { "textParagraph": { "text": "Terraform apply was successful." } } ] } ] } ]}')
+          else
+            MESSAGE=$(printf '{"cards": [ { "header": { "title": "Deployment Notification", "subtitle": "Deployment failed" }, "sections": [ { "widgets": [ { "textParagraph": { "text": "Terraform apply failed. Please check the logs." } } ] } ] } ]}')
+         fi
+         echo "message=$MESSAGE" >> $GITHUB_OUTPUT
+      - name: Send Google Chat Post-Deployment Notification
+        run: |
+          output=$(curl --max-time 10 -X POST \
+            -H 'Content-Type: application/json' \
+            -H "Authorization: Bearer ${{ secrets.GOOGLE_CHAT_TOKEN }}" \
+            -d '${{ steps.construct-post-deploy-message.outputs.message }}' "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
+          if [ $? -ne 0 ]; then
+            echo "Error sending Google Chat message: $output"
+            exit 1
+          fi
