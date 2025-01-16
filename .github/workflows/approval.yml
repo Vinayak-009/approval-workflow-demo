@@ -6,23 +6,14 @@ on:
       - main # or any other branch you use for deployment
 
 jobs:
-  terraform-deploy-with-approval:
+  terraform-plan-and-notify:
     runs-on: ubuntu-latest
     permissions:
       contents: 'read'
-      id-token: 'write'
-    environment:
-      name: production
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
-
-      - name: Configure GCP Credentials
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: 'projects/554761590655/locations/global/workloadIdentityPools/new-pool/providers/github-oidc-provider'
-          service_account: 'github-wif@no-migration.iam.gserviceaccount.com'
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v1
@@ -73,8 +64,33 @@ jobs:
             exit 1
           fi
 
+  terraform-apply:
+    runs-on: ubuntu-latest
+    needs: terraform-plan-and-notify
+    permissions:
+      id-token: 'write'
+    environment:
+      name: production
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Configure GCP Credentials
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: 'projects/554761590655/locations/global/workloadIdentityPools/new-pool/providers/github-oidc-provider'
+          service_account: 'github-actions-sa@no-migration.iam.gserviceaccount.com'
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v1
+        with:
+          terraform_version: 1.4.5  # Specify your desired version
+
+      - name: Terraform Init
+        run: terraform init
+
       - name: Terraform Apply
-        run: terraform apply -auto-approve tfplan
+        run: terraform apply tfplan
 
       - name: Construct Google Chat Post-Deployment Notification
         id: construct-post-deploy-message
@@ -92,7 +108,7 @@ jobs:
         if: success()
         run: |
           # Read the post-deployment message directly from the environment variable
-           output=$(curl --max-time 10 -X POST \
+          output=$(curl --max-time 10 -X POST \
             -H 'Content-Type: application/json' \
             -H "Authorization: Bearer ${{ secrets.GOOGLE_CHAT_TOKEN }}" \
             -d '${{ env.MESSAGE }}' "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
