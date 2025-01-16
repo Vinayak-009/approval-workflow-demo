@@ -9,8 +9,8 @@ jobs:
   terraform-deploy-with-approval:
     runs-on: ubuntu-latest
     permissions:
-        contents: 'read'
-        id-token: 'write'
+      contents: 'read'
+      id-token: 'write'
     environment:
       name: production
 
@@ -21,8 +21,8 @@ jobs:
       - name: Configure GCP Credentials
         uses: google-github-actions/auth@v2
         with:
-           workload_identity_provider: 'projects/554761590655/locations/global/workloadIdentityPools/new-pool/providers/github-oidc-provider'
-           service_account: 'github-actions-sa@no-migration.iam.gserviceaccount.com'
+          workload_identity_provider: 'projects/554761590655/locations/global/workloadIdentityPools/new-pool/providers/github-oidc-provider'
+          service_account: 'github-actions-sa@no-migration.iam.gserviceaccount.com'
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v1
@@ -46,35 +46,37 @@ jobs:
           else
              echo "No Terraform changes detected"
           fi
+
       - name: Construct Google Chat Message
         id: construct-message
         run: |
-            MESSAGE=$(printf '{"cards": [ { "header": { "title": "Terraform Approval", "subtitle": "Please review changes" }, "sections": [ { "widgets": [ {"textParagraph": { "text": "Terraform changes:\n```\n$(cat terraform_changes.txt)\n```" }} ] }, { "widgets": [ { "textParagraph": { "text": "Please approve the deployment [here](https://github.com/%s/actions/runs/%s)"}} ] } ] } ]}' "${{ github.repository }}" "${{ github.run_id }}")
-            echo "message=$MESSAGE" >> $GITHUB_OUTPUT
+          MESSAGE=$(printf '{"cards": [ { "header": { "title": "Terraform Approval", "subtitle": "Please review changes" }, "sections": [ { "widgets": [ {"textParagraph": { "text": "Terraform changes:\n```\n$(cat terraform_changes.txt)\n```" }} ] }, { "widgets": [ { "textParagraph": { "text": "Please approve the deployment [here](https://github.com/%s/actions/runs/%s)"}} ] } ] } ]}' "${{ github.repository }}" "${{ github.run_id }}")
+          echo "message=$MESSAGE" >> $GITHUB_OUTPUT
 
       - name: Send Google Chat Approval Request
         run: |
-            output=$(curl --max-time 10 -X POST \
-            -H 'Content-Type: application/json' \
-             -H "Authorization: Bearer ${{ secrets.GOOGLE_CHAT_TOKEN }}" \
-            -d '${{ steps.construct-message.outputs.message }}' "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
-            if [ $? -ne 0 ]; then
-              echo "Error sending Google Chat message: $output"
-              exit 1
-            fi
+          output=$(curl --max-time 10 -X POST \
+          -H 'Content-Type: application/json' \
+          -H "Authorization: Bearer ${{ secrets.GOOGLE_CHAT_TOKEN }}" \
+          -d '${{ steps.construct-message.outputs.message }}' "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
+          if [ $? -ne 0 ]; then
+            echo "Error sending Google Chat message: $output"
+            exit 1
+          fi
 
       - name: Terraform Apply
         run: terraform apply -auto-approve tfplan
+
       - name: Construct Google Chat Post-Deployment Notification
         id: construct-post-deploy-message
         run: |
-          MESSAGE='{"cards": [ { "header": { "title": "Deployment Notification", "subtitle": "Deployment finished" }, "sections": [ { "widgets": [ { "textParagraph": { "text": "Terraform apply was successful." }} ] } ] } ]}'
-          if ${{ success() }}; then
-            MESSAGE=$(printf '{"cards": [ { "header": { "title": "Deployment Notification", "subtitle": "Deployment finished" }, "sections": [ { "widgets": [ { "textParagraph": { "text": "Terraform apply was successful." }} ] } ] } ]}')
+          if [ ${{ job.status }} == 'success' ]; then
+            MESSAGE='{"cards": [ { "header": { "title": "Deployment Notification", "subtitle": "Deployment finished" }, "sections": [ { "widgets": [ { "textParagraph": { "text": "Terraform apply was successful." }} ] } ] } ]}'
           else
-            MESSAGE=$(printf '{"cards": [ { "header": { "title": "Deployment Notification", "subtitle": "Deployment failed" }, "sections": [ { "widgets": [ { "textParagraph": { "text": "Terraform apply failed. Please check the logs." }} ] } ] } ]}')
+            MESSAGE='{"cards": [ { "header": { "title": "Deployment Notification", "subtitle": "Deployment failed" }, "sections": [ { "widgets": [ { "textParagraph": { "text": "Terraform apply failed. Please check the logs." }} ] } ] } ]}'
           fi
           echo "message=$MESSAGE" >> $GITHUB_OUTPUT
+
       - name: Send Google Chat Post-Deployment Notification
         if: success()
         run: |
@@ -86,6 +88,7 @@ jobs:
             echo "Error sending Google Chat message: $output"
             exit 1
           fi
+
       - name: Send Google Chat Post-Deployment Notification (Failure)
         if: failure()
         run: |
@@ -94,6 +97,6 @@ jobs:
             -H "Authorization: Bearer ${{ secrets.GOOGLE_CHAT_TOKEN }}" \
             -d '${{ steps.construct-post-deploy-message.outputs.message }}' "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
           if [ $? -ne 0 ]; then
-             echo "Error sending Google Chat message: $output"
-             exit 1
+            echo "Error sending Google Chat message: $output"
+            exit 1
           fi
