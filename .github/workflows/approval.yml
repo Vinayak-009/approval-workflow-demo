@@ -68,13 +68,15 @@ jobs:
       - name: Construct Google Chat Post-Deployment Notification
         id: construct-post-deploy-message
         run: |
-         if ${{ success() }}; then
-            MESSAGE=$(printf '{"cards": [ { "header": { "title": "Deployment Notification", "subtitle": "Deployment finished" }, "sections": [ { "widgets": [ { "textParagraph": { "text": "Terraform apply was successful." } } ] } ] } ]}')
+          MESSAGE='{"cards": [ { "header": { "title": "Deployment Notification", "subtitle": "Deployment finished" }, "sections": [ { "widgets": [ { "textParagraph": { "text": "Terraform apply was successful." }} ] } ] } ]}'
+          if ${{ success() }}; then
+            MESSAGE=$(printf '{"cards": [ { "header": { "title": "Deployment Notification", "subtitle": "Deployment finished" }, "sections": [ { "widgets": [ { "textParagraph": { "text": "Terraform apply was successful." }} ] } ] } ]}')
           else
-            MESSAGE=$(printf '{"cards": [ { "header": { "title": "Deployment Notification", "subtitle": "Deployment failed" }, "sections": [ { "widgets": [ { "textParagraph": { "text": "Terraform apply failed. Please check the logs." } } ] } ] } ]}')
-         fi
-         echo "message=$MESSAGE" >> $GITHUB_OUTPUT
+            MESSAGE=$(printf '{"cards": [ { "header": { "title": "Deployment Notification", "subtitle": "Deployment failed" }, "sections": [ { "widgets": [ { "textParagraph": { "text": "Terraform apply failed. Please check the logs." }} ] } ] } ]}')
+          fi
+          echo "message=$MESSAGE" >> $GITHUB_OUTPUT
       - name: Send Google Chat Post-Deployment Notification
+        if: success()
         run: |
           output=$(curl --max-time 10 -X POST \
             -H 'Content-Type: application/json' \
@@ -83,4 +85,15 @@ jobs:
           if [ $? -ne 0 ]; then
             echo "Error sending Google Chat message: $output"
             exit 1
+          fi
+      - name: Send Google Chat Post-Deployment Notification (Failure)
+        if: failure()
+        run: |
+          output=$(curl --max-time 10 -X POST \
+            -H 'Content-Type: application/json' \
+            -H "Authorization: Bearer ${{ secrets.GOOGLE_CHAT_TOKEN }}" \
+            -d '${{ steps.construct-post-deploy-message.outputs.message }}' "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
+          if [ $? -ne 0 ]; then
+             echo "Error sending Google Chat message: $output"
+             exit 1
           fi
