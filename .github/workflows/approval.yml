@@ -52,17 +52,18 @@ jobs:
         run: |
           terraform_changes=$(cat terraform_changes.txt)
 
-          # Remove specific characters and clean up Terraform plan output
+          # Clean up terraform plan output (removing leading characters and newlines)
           terraform_changes_cleaned=$(echo "$terraform_changes" | sed 's/[~+-]//g' | tr -d '\n')
 
+          # Construct the message for Google Chat
           MESSAGE=$(printf '{"cards": [ { "header": { "title": "Terraform Approval", "subtitle": "Please review changes" }, "sections": [ { "widgets": [ {"textParagraph": { "text": "Terraform changes:\n```%s```" }} ] }, { "widgets": [ { "textParagraph": { "text": "Please approve the deployment [here](https://github.com/%s/actions/runs/%s)"}} ] } ] } ]}' "$terraform_changes_cleaned" "${{ github.repository }}" "${{ github.run_id }}")
 
-          # Directly use the message without Base64 encoding
+          # Safely set the message as an environment variable
           echo "MESSAGE=$MESSAGE" >> $GITHUB_ENV
 
       - name: Send Google Chat Approval Request
         run: |
-          # Read the message directly from the environment
+          # Read the message directly from the environment variable
           MESSAGE="${{ env.MESSAGE }}"
 
           output=$(curl --max-time 10 -X POST \
@@ -86,13 +87,13 @@ jobs:
             MESSAGE='{"cards": [ { "header": { "title": "Deployment Notification", "subtitle": "Deployment failed" }, "sections": [ { "widgets": [ { "textParagraph": { "text": "Terraform apply failed. Please check the logs." }} ] } ] } ]}'
           fi
 
-          # Directly use the message without Base64 encoding
+          # Safely set the post-deployment message as an environment variable
           echo "MESSAGE=$MESSAGE" >> $GITHUB_ENV
 
       - name: Send Google Chat Post-Deployment Notification
         if: success()
         run: |
-          # Read the message directly from the environment
+          # Read the post-deployment message directly from the environment variable
           MESSAGE="${{ env.MESSAGE }}"
 
           output=$(curl --max-time 10 -X POST \
@@ -107,7 +108,7 @@ jobs:
       - name: Send Google Chat Post-Deployment Notification (Failure)
         if: failure()
         run: |
-          # Read the message directly from the environment
+          # Read the post-deployment message directly from the environment variable
           MESSAGE="${{ env.MESSAGE }}"
 
           output=$(curl --max-time 10 -X POST \
