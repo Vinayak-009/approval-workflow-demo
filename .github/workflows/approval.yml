@@ -31,7 +31,7 @@ jobs:
 
       - name: Terraform Init
         run: terraform init
-      
+
       - name: Terraform Plan
         id: terraform_plan
         run: terraform plan -out=tfplan | tee terraform_plan.txt
@@ -52,20 +52,21 @@ jobs:
         run: |
           terraform_changes=$(cat terraform_changes.txt)
 
-          # remove newlines and the other characters in the terraform plan output
+          # Remove specific characters and clean up Terraform plan output
           terraform_changes_cleaned=$(echo "$terraform_changes" | sed 's/[~+-]//g' | tr -d '\n')
-          
+
           MESSAGE=$(printf '{"cards": [ { "header": { "title": "Terraform Approval", "subtitle": "Please review changes" }, "sections": [ { "widgets": [ {"textParagraph": { "text": "Terraform changes:\n```%s```" }} ] }, { "widgets": [ { "textParagraph": { "text": "Please approve the deployment [here](https://github.com/%s/actions/runs/%s)"}} ] } ] } ]}' "$terraform_changes_cleaned" "${{ github.repository }}" "${{ github.run_id }}")
 
-          # Base64 Encode the MESSAGE
-           ENCODED_MESSAGE=$(echo "$MESSAGE" | base64)
-           echo "ENCODED_MESSAGE=$ENCODED_MESSAGE" >> $GITHUB_ENV
+          # Base64 encode the MESSAGE and save to the environment
+          ENCODED_MESSAGE=$(echo "$MESSAGE" | base64)
+          echo "ENCODED_MESSAGE=$ENCODED_MESSAGE" >> $GITHUB_ENV
 
       - name: Send Google Chat Approval Request
         run: |
-          #Base64 decode the message and store it
+          # Base64 decode the message
           DECODED_MESSAGE=$(echo "${{ env.ENCODED_MESSAGE }}" | base64 --decode)
 
+          # Send the message to Google Chat
           output=$(curl --max-time 10 -X POST \
           -H 'Content-Type: application/json' \
           -H "Authorization: Bearer ${{ secrets.GOOGLE_CHAT_TOKEN }}" \
@@ -81,19 +82,20 @@ jobs:
       - name: Construct Google Chat Post-Deployment Notification
         id: construct-post-deploy-message
         run: |
-          if [ ${{ job.status }} == 'success' ]; then
+          if [ "${{ job.status }}" == 'success' ]; then
             MESSAGE='{"cards": [ { "header": { "title": "Deployment Notification", "subtitle": "Deployment finished" }, "sections": [ { "widgets": [ { "textParagraph": { "text": "Terraform apply was successful." }} ] } ] } ]}'
           else
             MESSAGE='{"cards": [ { "header": { "title": "Deployment Notification", "subtitle": "Deployment failed" }, "sections": [ { "widgets": [ { "textParagraph": { "text": "Terraform apply failed. Please check the logs." }} ] } ] } ]}'
           fi
-          # Base64 encode the Message
+
+          # Base64 encode the message
           ENCODED_MESSAGE=$(echo "$MESSAGE" | base64)
           echo "ENCODED_MESSAGE=$ENCODED_MESSAGE" >> $GITHUB_ENV
 
       - name: Send Google Chat Post-Deployment Notification
         if: success()
         run: |
-           #Base64 decode the message and store it
+          # Base64 decode the message and send
           DECODED_MESSAGE=$(echo "${{ env.ENCODED_MESSAGE }}" | base64 --decode)
           output=$(curl --max-time 10 -X POST \
             -H 'Content-Type: application/json' \
@@ -107,7 +109,7 @@ jobs:
       - name: Send Google Chat Post-Deployment Notification (Failure)
         if: failure()
         run: |
-          #Base64 decode the message and store it
+          # Base64 decode the message and send
           DECODED_MESSAGE=$(echo "${{ env.ENCODED_MESSAGE }}" | base64 --decode)
           output=$(curl --max-time 10 -X POST \
             -H 'Content-Type: application/json' \
