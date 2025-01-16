@@ -50,9 +50,12 @@ jobs:
       - name: Construct Google Chat Message
         id: construct-message
         run: |
-          # Escaping the terraform changes for Google Chat message
           terraform_changes=$(cat terraform_changes.txt)
-          MESSAGE=$(printf '{"cards": [ { "header": { "title": "Terraform Approval", "subtitle": "Please review changes" }, "sections": [ { "widgets": [ {"textParagraph": { "text": "Terraform changes:\n```%s```" }} ] }, { "widgets": [ { "textParagraph": { "text": "Please approve the deployment [here](https://github.com/%s/actions/runs/%s)"}} ] } ] } ]}' "$terraform_changes" "${{ github.repository }}" "${{ github.run_id }}")
+
+          # Escape special characters like newline, plus, minus, tilde, etc.
+          terraform_changes_escaped=$(echo "$terraform_changes" | sed 's/+/\\+/g' | sed 's/-/\\-/g' | sed 's/~//g' | sed 's/\r//g' | sed 's/\n/\\n/g')
+          
+          MESSAGE=$(printf '{"cards": [ { "header": { "title": "Terraform Approval", "subtitle": "Please review changes" }, "sections": [ { "widgets": [ {"textParagraph": { "text": "Terraform changes:\n```%s```" }} ] }, { "widgets": [ { "textParagraph": { "text": "Please approve the deployment [here](https://github.com/%s/actions/runs/%s)"}} ] } ] } ]}' "$terraform_changes_escaped" "${{ github.repository }}" "${{ github.run_id }}")
           
           # Write the message to the environment file
           echo "MESSAGE=$MESSAGE" >> $GITHUB_ENV
