@@ -50,15 +50,19 @@ jobs:
       - name: Construct Google Chat Message
         id: construct-message
         run: |
-          MESSAGE=$(printf '{"cards": [ { "header": { "title": "Terraform Approval", "subtitle": "Please review changes" }, "sections": [ { "widgets": [ {"textParagraph": { "text": "Terraform changes:\n```\n$(cat terraform_changes.txt)\n```" }} ] }, { "widgets": [ { "textParagraph": { "text": "Please approve the deployment [here](https://github.com/%s/actions/runs/%s)"}} ] } ] } ]}' "${{ github.repository }}" "${{ github.run_id }}")
-          echo "message=$MESSAGE" >> $GITHUB_OUTPUT
+          # Escaping the terraform changes for Google Chat message
+          terraform_changes=$(cat terraform_changes.txt)
+          MESSAGE=$(printf '{"cards": [ { "header": { "title": "Terraform Approval", "subtitle": "Please review changes" }, "sections": [ { "widgets": [ {"textParagraph": { "text": "Terraform changes:\n```%s```" }} ] }, { "widgets": [ { "textParagraph": { "text": "Please approve the deployment [here](https://github.com/%s/actions/runs/%s)"}} ] } ] } ]}' "$terraform_changes" "${{ github.repository }}" "${{ github.run_id }}")
+          
+          # Write the message to the environment file
+          echo "MESSAGE=$MESSAGE" >> $GITHUB_ENV
 
       - name: Send Google Chat Approval Request
         run: |
           output=$(curl --max-time 10 -X POST \
           -H 'Content-Type: application/json' \
           -H "Authorization: Bearer ${{ secrets.GOOGLE_CHAT_TOKEN }}" \
-          -d '${{ steps.construct-message.outputs.message }}' "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
+          -d "${{ env.MESSAGE }}" "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
           if [ $? -ne 0 ]; then
             echo "Error sending Google Chat message: $output"
             exit 1
@@ -75,7 +79,7 @@ jobs:
           else
             MESSAGE='{"cards": [ { "header": { "title": "Deployment Notification", "subtitle": "Deployment failed" }, "sections": [ { "widgets": [ { "textParagraph": { "text": "Terraform apply failed. Please check the logs." }} ] } ] } ]}'
           fi
-          echo "message=$MESSAGE" >> $GITHUB_OUTPUT
+          echo "MESSAGE=$MESSAGE" >> $GITHUB_ENV
 
       - name: Send Google Chat Post-Deployment Notification
         if: success()
@@ -83,7 +87,7 @@ jobs:
           output=$(curl --max-time 10 -X POST \
             -H 'Content-Type: application/json' \
             -H "Authorization: Bearer ${{ secrets.GOOGLE_CHAT_TOKEN }}" \
-            -d '${{ steps.construct-post-deploy-message.outputs.message }}' "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
+            -d "${{ env.MESSAGE }}" "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
           if [ $? -ne 0 ]; then
             echo "Error sending Google Chat message: $output"
             exit 1
@@ -95,7 +99,7 @@ jobs:
           output=$(curl --max-time 10 -X POST \
             -H 'Content-Type: application/json' \
             -H "Authorization: Bearer ${{ secrets.GOOGLE_CHAT_TOKEN }}" \
-            -d '${{ steps.construct-post-deploy-message.outputs.message }}' "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
+            -d "${{ env.MESSAGE }}" "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
           if [ $? -ne 0 ]; then
             echo "Error sending Google Chat message: $output"
             exit 1
