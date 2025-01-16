@@ -57,20 +57,18 @@ jobs:
 
           MESSAGE=$(printf '{"cards": [ { "header": { "title": "Terraform Approval", "subtitle": "Please review changes" }, "sections": [ { "widgets": [ {"textParagraph": { "text": "Terraform changes:\n```%s```" }} ] }, { "widgets": [ { "textParagraph": { "text": "Please approve the deployment [here](https://github.com/%s/actions/runs/%s)"}} ] } ] } ]}' "$terraform_changes_cleaned" "${{ github.repository }}" "${{ github.run_id }}")
 
-          # Base64 encode the MESSAGE and save to the environment
-          ENCODED_MESSAGE=$(echo "$MESSAGE" | base64)
-          echo "ENCODED_MESSAGE=$ENCODED_MESSAGE" >> $GITHUB_ENV
+          # Directly use the message without Base64 encoding
+          echo "MESSAGE=$MESSAGE" >> $GITHUB_ENV
 
       - name: Send Google Chat Approval Request
         run: |
-          # Base64 decode the message
-          DECODED_MESSAGE=$(echo "${{ env.ENCODED_MESSAGE }}" | base64 --decode)
+          # Read the message directly from the environment
+          MESSAGE="${{ env.MESSAGE }}"
 
-          # Send the message to Google Chat
           output=$(curl --max-time 10 -X POST \
           -H 'Content-Type: application/json' \
           -H "Authorization: Bearer ${{ secrets.GOOGLE_CHAT_TOKEN }}" \
-          -d "$DECODED_MESSAGE" "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
+          -d "$MESSAGE" "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
           if [ $? -ne 0 ]; then
             echo "Error sending Google Chat message: $output"
             exit 1
@@ -88,19 +86,19 @@ jobs:
             MESSAGE='{"cards": [ { "header": { "title": "Deployment Notification", "subtitle": "Deployment failed" }, "sections": [ { "widgets": [ { "textParagraph": { "text": "Terraform apply failed. Please check the logs." }} ] } ] } ]}'
           fi
 
-          # Base64 encode the message
-          ENCODED_MESSAGE=$(echo "$MESSAGE" | base64)
-          echo "ENCODED_MESSAGE=$ENCODED_MESSAGE" >> $GITHUB_ENV
+          # Directly use the message without Base64 encoding
+          echo "MESSAGE=$MESSAGE" >> $GITHUB_ENV
 
       - name: Send Google Chat Post-Deployment Notification
         if: success()
         run: |
-          # Base64 decode the message and send
-          DECODED_MESSAGE=$(echo "${{ env.ENCODED_MESSAGE }}" | base64 --decode)
+          # Read the message directly from the environment
+          MESSAGE="${{ env.MESSAGE }}"
+
           output=$(curl --max-time 10 -X POST \
             -H 'Content-Type: application/json' \
             -H "Authorization: Bearer ${{ secrets.GOOGLE_CHAT_TOKEN }}" \
-            -d "$DECODED_MESSAGE" "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
+            -d "$MESSAGE" "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
           if [ $? -ne 0 ]; then
             echo "Error sending Google Chat message: $output"
             exit 1
@@ -109,12 +107,13 @@ jobs:
       - name: Send Google Chat Post-Deployment Notification (Failure)
         if: failure()
         run: |
-          # Base64 decode the message and send
-          DECODED_MESSAGE=$(echo "${{ env.ENCODED_MESSAGE }}" | base64 --decode)
+          # Read the message directly from the environment
+          MESSAGE="${{ env.MESSAGE }}"
+
           output=$(curl --max-time 10 -X POST \
             -H 'Content-Type: application/json' \
             -H "Authorization: Bearer ${{ secrets.GOOGLE_CHAT_TOKEN }}" \
-            -d "$DECODED_MESSAGE" "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
+            -d "$MESSAGE" "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
           if [ $? -ne 0 ]; then
             echo "Error sending Google Chat message: $output"
             exit 1
