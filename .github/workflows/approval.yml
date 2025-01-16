@@ -51,6 +51,12 @@ jobs:
 
           # Safely set the message as an environment variable
           echo "MESSAGE=$MESSAGE" >> $GITHUB_ENV
+      
+      - name: Upload Terraform Plan Artifact
+        uses: actions/upload-artifact@v3
+        with:
+           name: tfplan-artifact
+           path: tfplan
 
       - name: Send Google Chat Approval Request
         run: |
@@ -72,6 +78,12 @@ jobs:
     environment:
       name: production
     steps:
+      - name: Download Terraform Plan Artifact
+        uses: actions/download-artifact@v3
+        with:
+           name: tfplan-artifact
+           path: .
+
       - name: Checkout Code
         uses: actions/checkout@v3
 
