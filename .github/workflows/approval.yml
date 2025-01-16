@@ -31,7 +31,7 @@ jobs:
 
       - name: Terraform Init
         run: terraform init
-
+      
       - name: Terraform Plan
         id: terraform_plan
         run: terraform plan -out=tfplan | tee terraform_plan.txt
@@ -64,12 +64,10 @@ jobs:
       - name: Send Google Chat Approval Request
         run: |
           # Read the message directly from the environment variable
-          MESSAGE="${{ env.MESSAGE }}"
-
           output=$(curl --max-time 10 -X POST \
           -H 'Content-Type: application/json' \
           -H "Authorization: Bearer ${{ secrets.GOOGLE_CHAT_TOKEN }}" \
-          -d "$MESSAGE" "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
+          -d '${{ env.MESSAGE }}' "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
           if [ $? -ne 0 ]; then
             echo "Error sending Google Chat message: $output"
             exit 1
@@ -94,12 +92,10 @@ jobs:
         if: success()
         run: |
           # Read the post-deployment message directly from the environment variable
-          MESSAGE="${{ env.MESSAGE }}"
-
-          output=$(curl --max-time 10 -X POST \
+           output=$(curl --max-time 10 -X POST \
             -H 'Content-Type: application/json' \
             -H "Authorization: Bearer ${{ secrets.GOOGLE_CHAT_TOKEN }}" \
-            -d "$MESSAGE" "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
+            -d '${{ env.MESSAGE }}' "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
           if [ $? -ne 0 ]; then
             echo "Error sending Google Chat message: $output"
             exit 1
@@ -109,12 +105,10 @@ jobs:
         if: failure()
         run: |
           # Read the post-deployment message directly from the environment variable
-          MESSAGE="${{ env.MESSAGE }}"
-
           output=$(curl --max-time 10 -X POST \
             -H 'Content-Type: application/json' \
             -H "Authorization: Bearer ${{ secrets.GOOGLE_CHAT_TOKEN }}" \
-            -d "$MESSAGE" "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
+            -d '${{ env.MESSAGE }}' "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
           if [ $? -ne 0 ]; then
             echo "Error sending Google Chat message: $output"
             exit 1
