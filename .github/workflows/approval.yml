@@ -11,11 +11,7 @@ jobs:
     permissions:
       contents: 'read'
       id-token: 'write'
-    environment:
-      name: production
-      # Define required reviewers for manual approval
-      reviewers:
-        - "Harish-0012"  # GitHub username of the approver
+
     steps:
       - name: Checkout Code
         id: checkout
@@ -89,11 +85,17 @@ jobs:
           cat terraform_changes.txt
           echo "-------------------------------------------------"
 
-      # Manual approval step
-      - name: Wait for Approval
-        uses: peter-evans/workflow-dispatch@v1
+      # Manual approval step before applying Terraform changes
+      - name: Wait for approval to deploy to production
+        uses: trstringer/manual-approval@v1
         with:
-          workflow: wait-for-approval.yml  # Separate workflow or approval logic (if applicable)
-          
+          secret: ${{ secrets.NEW_APPROVE_SECRET }}  # Use the secret token for approval
+          approvers: Harish-0012  # Replace with real GitHub usernames or teams
+          minimum-approvals: 1
+          issue-title: "Approve deployment to production"
+          issue-body: "Please approve or deny the deployment of the latest code to production."
+          exclude-workflow-initiator-as-approver: true
+
+      # Proceed with Terraform Apply after approval
       - name: Terraform Apply
         run: terraform apply tfplan
