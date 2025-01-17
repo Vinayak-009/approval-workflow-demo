@@ -83,17 +83,15 @@ jobs:
           echo "Extracted Terraform Changes Output:"
           cat terraform_changes.txt
           echo "-------------------------------------------------"
-
-      # Manual approval step
+      
       - name: Wait for approval to deploy to production
         uses: trstringer/manual-approval@v1
         with:
-          secret: ${{ secrets.GITHUB_TOKEN }}  # Use the secret token for approval
+          secret: ${{ secrets.NEW_APPROVE_SECRET }}  # Use the secret token for approval
           approvers: Harish-0012  # Replace with real GitHub usernames or teams
           minimum-approvals: 1
           issue-title: "Approve deployment to production"
-          issue-body: "Please approve or deny the deployment of the latest code to production."
-          exclude-workflow-initiator-as-approver: true
-
+          
+          
       - name: Terraform Apply
         run: terraform apply tfplan
