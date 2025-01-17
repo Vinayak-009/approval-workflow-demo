@@ -1,9 +1,9 @@
-name: Terraform Deployment with Google Chat Approval
+name: Terraform Deployment with Commit Info and Manual Approval
 
 on:
   push:
     branches:
-      - main # or any other branch you use for deployment
+      - main  # Trigger on pushes to the main branch
 
 jobs:
   terraform-deploy-with-approval:
@@ -13,29 +13,32 @@ jobs:
       id-token: 'write'
     environment:
       name: production
-
     steps:
       - name: Checkout Code
+        id: checkout
         uses: actions/checkout@v3
 
       - name: Configure GCP Credentials
+        id: configure_gcp
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: 'projects/554761590655/locations/global/workloadIdentityPools/new-pool/providers/github-oidc-provider'
           service_account: 'github-wif@no-migration.iam.gserviceaccount.com'
 
       - name: Set up Terraform
+        id: setup_terraform
         uses: hashicorp/setup-terraform@v1
         with:
-          terraform_version: 1.4.5  # Specify your desired version
+          terraform_version: 1.4.5
 
       - name: Terraform Init
+        id: terraform_init
         run: terraform init
-      
+
       - name: Terraform Plan
         id: terraform_plan
         run: terraform plan -out=tfplan | tee terraform_plan.txt
-
+      
       - name: Extract Terraform Changes
         id: extract_changes
         run: |
@@ -44,72 +47,43 @@ jobs:
             echo "Terraform changes:"
             cat terraform_changes.txt
           else
-             echo "No Terraform changes detected"
+            echo "No Terraform changes detected"
           fi
-
-      - name: Construct Google Chat Message
-        id: construct-message
+        
+      - name: Extract Commit Message
+        id: extract_commit
         run: |
-          terraform_changes=$(cat terraform_changes.txt)
+          COMMIT_MESSAGE=$(git log -1 --pretty=%B)
+          echo "COMMIT_MESSAGE=$COMMIT_MESSAGE" >> $GITHUB_ENV
 
-          # Clean up terraform plan output (removing leading characters and newlines)
-          terraform_changes_cleaned=$(echo "$terraform_changes" | sed 's/[~+-]//g' | tr -d '\n')
-
-          # Construct the message for Google Chat
-          MESSAGE=$(printf '{"cards": [ { "header": { "title": "Terraform Approval", "subtitle": "Please review changes" }, "sections": [ { "widgets": [ {"textParagraph": { "text": "Terraform changes:\n```%s```" }} ] }, { "widgets": [ { "textParagraph": { "text": "Please approve the deployment [here](https://github.com/%s/actions/runs/%s)"}} ] } ] } ]}' "$terraform_changes_cleaned" "${{ github.repository }}" "${{ github.run_id }}")
-
-          # Safely set the message as an environment variable
-          echo "MESSAGE=$MESSAGE" >> $GITHUB_ENV
-
-      - name: Send Google Chat Approval Request
+      - name: Display Full Output
         run: |
-          # Read the message directly from the environment variable
-          output=$(curl --max-time 10 -X POST \
-          -H 'Content-Type: application/json' \
-          -H "Authorization: Bearer ${{ secrets.GOOGLE_CHAT_TOKEN }}" \
-          -d '${{ env.MESSAGE }}' "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
-          if [ $? -ne 0 ]; then
-            echo "Error sending Google Chat message: $output"
-            exit 1
-          fi
-
+          echo "-------------------------------------------------"
+          echo "                   Workflow Summary               "
+          echo "-------------------------------------------------"
+          echo "Commit Message:"
+          echo "${{ env.COMMIT_MESSAGE }}"
+          echo "-------------------------------------------------"
+          echo "Checkout Code Step"
+          echo "Time: $(date +%Y-%m-%d-%H-%M-%S)"
+          echo "-------------------------------------------------"
+          echo "Configure GCP Credentials Step"
+          echo "Time: $(date +%Y-%m-%d-%H-%M-%S)"
+          echo "-------------------------------------------------"
+          echo "Set up Terraform Step"
+          echo "Time: $(date +%Y-%m-%d-%H-%M-%S)"
+          echo "-------------------------------------------------"
+          echo "Terraform Init Step"
+          echo "Time: $(date +%Y-%m-%d-%H-%M-%S)"
+          echo "-------------------------------------------------"
+          echo "Terraform Plan Step"
+          echo "Time: $(date +%Y-%m-%d-%H-%M-%S)"
+          echo "-------------------------------------------------"
+          echo "Terraform Plan Output:"
+          cat terraform_plan.txt
+          echo "-------------------------------------------------"
+          echo "Extracted Terraform Changes Output:"
+          cat terraform_changes.txt
+          echo "-------------------------------------------------"
       - name: Terraform Apply
         run: terraform apply tfplan
-
-      - name: Construct Google Chat Post-Deployment Notification
-        id: construct-post-deploy-message
-        run: |
-          if [ "${{ job.status }}" == 'success' ]; then
-            MESSAGE='{"cards": [ { "header": { "title": "Deployment Notification", "subtitle": "Deployment finished" }, "sections": [ { "widgets": [ { "textParagraph": { "text": "Terraform apply was successful." }} ] } ] } ]}'
-          else
-            MESSAGE='{"cards": [ { "header": { "title": "Deployment Notification", "subtitle": "Deployment failed" }, "sections": [ { "widgets": [ { "textParagraph": { "text": "Terraform apply failed. Please check the logs." }} ] } ] } ]}'
-          fi
-
-          # Safely set the post-deployment message as an environment variable
-          echo "MESSAGE=$MESSAGE" >> $GITHUB_ENV
-
-      - name: Send Google Chat Post-Deployment Notification
-        if: success()
-        run: |
-          # Read the post-deployment message directly from the environment variable
-          output=$(curl --max-time 10 -X POST \
-            -H 'Content-Type: application/json' \
-            -H "Authorization: Bearer ${{ secrets.GOOGLE_CHAT_TOKEN }}" \
-            -d '${{ env.MESSAGE }}' "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
-          if [ $? -ne 0 ]; then
-            echo "Error sending Google Chat message: $output"
-            exit 1
-          fi
-
-      - name: Send Google Chat Post-Deployment Notification (Failure)
-        if: failure()
-        run: |
-          # Read the post-deployment message directly from the environment variable
-          output=$(curl --max-time 10 -X POST \
-            -H 'Content-Type: application/json' \
-            -H "Authorization: Bearer ${{ secrets.GOOGLE_CHAT_TOKEN }}" \
-            -d '${{ env.MESSAGE }}' "${{ secrets.GOOGLE_CHAT_SPACE_URL }}" )
-          if [ $? -ne 0 ]; then
-            echo "Error sending Google Chat message: $output"
-            exit 1
-          fi
