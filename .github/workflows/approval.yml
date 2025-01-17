@@ -11,7 +11,6 @@ jobs:
     permissions:
       contents: 'read'
       id-token: 'write'
-
     steps:
       - name: Checkout Code
         id: checkout
@@ -85,7 +84,7 @@ jobs:
           cat terraform_changes.txt
           echo "-------------------------------------------------"
 
-      # Manual approval step before applying Terraform changes
+      # Manual approval step
       - name: Wait for approval to deploy to production
         uses: trstringer/manual-approval@v1
         with:
@@ -95,7 +94,7 @@ jobs:
           issue-title: "Approve deployment to production"
           issue-body: "Please approve or deny the deployment of the latest code to production."
           exclude-workflow-initiator-as-approver: true
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}  # Add the personal access token secret here
 
-      # Proceed with Terraform Apply after approval
       - name: Terraform Apply
         run: terraform apply tfplan
