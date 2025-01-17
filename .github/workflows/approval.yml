@@ -1,28 +1,25 @@
-name: Terraform Deployment with Manual Approval
+name: Manual Approval Workflow
 
 on:
   push:
     branches:
-      - main  # Trigger on pushes to the main branch
+      - main  # The workflow will trigger on pushes to the 'main' branch
 
 jobs:
-  terraform-deploy-with-approval:
+  prepare-deployment:
     runs-on: ubuntu-latest
-    permissions:
-      contents: 'read'
-      id-token: 'write'
+    outputs:
+      commit_message: ${{ steps.extract_commit.outputs.COMMIT_MESSAGE }}
     steps:
+      # Checkout the repository's code
       - name: Checkout Code
         id: checkout
         uses: actions/checkout@v3
 
-      - name: Configure GCP Credentials
-        id: configure_gcp
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: 'projects/554761590655/locations/global/workloadIdentityPools/new-pool/providers/github-oidc-provider'
-          service_account: 'github-wif@no-migration.iam.gserviceaccount.com'
-
+      # Deploy to staging (dummy step here)
+      - name: Deploy to Staging
+        run: |
+          echo "Deploying code to staging environment..."
       - name: Set up Terraform
         id: setup_terraform
         uses: hashicorp/setup-terraform@v1
@@ -52,7 +49,33 @@ jobs:
         id: extract_commit
         run: |
           COMMIT_MESSAGE=$(git log -1 --pretty=%B)
-          echo "COMMIT_MESSAGE=$COMMIT_MESSAGE" >> $GITHUB_ENV
+          echo "COMMIT_MESSAGE=$COMMIT_MESSAGE" >> $GITHUB_OUTPUT
+
+  deploy-to-production:
+    runs-on: ubuntu-latest
+    needs: prepare-deployment
+    permissions:
+      id-token: 'write'
+      contents: 'read'
+    environment:
+      name: production
+    steps:
+      # Manual approval step
+      - name: Wait for approval to deploy to production
+        uses: trstringer/manual-approval@v1
+        with:
+          secret: ${{ secrets.NEW_APPROVE_SECRET }}  # Use the secret token for approval
+          approvers: Harish-0012  # Replace with real GitHub usernames or teams
+          minimum-approvals: 1
+          issue-title: "Approve deployment to production"
+          issue-body: "Please approve or deny the deployment of the latest code to production."
+          exclude-workflow-initiator-as-approver: true
+
+      - name: Configure GCP Credentials
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: 'projects/554761590655/locations/global/workloadIdentityPools/new-pool/providers/github-oidc-provider'
+          service_account: 'github-wif@no-migration.iam.gserviceaccount.com'
 
       - name: Display Full Output
         run: |
@@ -60,12 +83,9 @@ jobs:
           echo "                   Workflow Summary               "
           echo "-------------------------------------------------"
           echo "Commit Message:"
-          echo "${{ env.COMMIT_MESSAGE }}"
+          echo "${{ needs.prepare-deployment.outputs.commit_message }}"
           echo "-------------------------------------------------"
           echo "Checkout Code Step"
-          echo "Time: $(date +%Y-%m-%d-%H-%M-%S)"
-          echo "-------------------------------------------------"
-          echo "Configure GCP Credentials Step"
           echo "Time: $(date +%Y-%m-%d-%H-%M-%S)"
           echo "-------------------------------------------------"
           echo "Set up Terraform Step"
@@ -74,24 +94,15 @@ jobs:
           echo "Terraform Init Step"
           echo "Time: $(date +%Y-%m-%d-%H-%M-%S)"
           echo "-------------------------------------------------"
-          echo "Terraform Plan Step"
+           echo "Terraform Plan Step"
           echo "Time: $(date +%Y-%m-%d-%H-%M-%S)"
           echo "-------------------------------------------------"
           echo "Terraform Plan Output:"
-          cat terraform_plan.txt
+          cat tfplan
           echo "-------------------------------------------------"
           echo "Extracted Terraform Changes Output:"
           cat terraform_changes.txt
           echo "-------------------------------------------------"
-      
-      - name: Wait for approval to deploy to production
-        uses: trstringer/manual-approval@v1
-        with:
-          secret: ${{ secrets.NEW_APPROVE_SECRET }}  # Use the secret token for approval
-          approvers: Harish-0012  # Replace with real GitHub usernames or teams
-          minimum-approvals: 1
-          issue-title: "Approve deployment to production"
-          
-          
+
       - name: Terraform Apply
         run: terraform apply tfplan
