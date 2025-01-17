@@ -11,6 +11,8 @@ jobs:
     permissions:
       contents: 'read'
       id-token: 'write'
+      issues: 'write'  # Ensure write permissions for creating issues
+
     steps:
       - name: Checkout Code
         id: checkout
@@ -36,22 +38,21 @@ jobs:
       - name: Terraform Plan
         id: terraform_plan
         run: terraform plan -out=tfplan | tee terraform_plan.txt
-      
+
       - name: Extract Terraform Changes
         id: extract_changes
         run: |
+          # Capture the output of terraform plan
           grep -E '(\+|\-|\~)' terraform_plan.txt > terraform_changes.txt
           if [ -s "terraform_changes.txt" ]; then
-            echo "Terraform changes:"
+            echo "Terraform changes detected"
             cat terraform_changes.txt
-             # Base64 encode the CHANGES
-            ENCODED_CHANGES=$(cat terraform_changes.txt | base64)
-            echo "CHANGES=$ENCODED_CHANGES" >> $GITHUB_OUTPUT
+            echo "CHANGES=$(cat terraform_changes.txt)" >> $GITHUB_ENV
           else
             echo "No Terraform changes detected"
-             echo "CHANGES=No Terraform changes detected" >> $GITHUB_OUTPUT
+            echo "CHANGES=No Terraform changes detected" >> $GITHUB_ENV
           fi
-        
+
       - name: Extract Commit Message
         id: extract_commit
         run: |
@@ -84,11 +85,11 @@ jobs:
           echo "Terraform Plan Output:"
           cat terraform_plan.txt
           echo "-------------------------------------------------"
-           echo "Extracted Terraform Changes Output:"
-          # decode the changes so that they are displayed properly
-          echo "${{ steps.extract_changes.outputs.CHANGES }}" | base64 --decode
+          echo "Extracted Terraform Changes Output:"
+          cat terraform_changes.txt
           echo "-------------------------------------------------"
-    
+
+      # Manual approval step
       - name: Wait for approval to deploy to production
         uses: trstringer/manual-approval@v1
         with:
@@ -102,11 +103,12 @@ jobs:
            URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
            Required approvers: [Harish-0012]
            Respond "approved", "approve", "lgtm", "yes" to continue workflow or "denied", "deny", "no" to cancel.
-
+           
            Terraform Changes:
            ```
-            ${{ steps.extract_changes.outputs.CHANGES }}
+           ${{ env.CHANGES }}
            ```
 
       - name: Terraform Apply
         run: terraform apply tfplan
+
