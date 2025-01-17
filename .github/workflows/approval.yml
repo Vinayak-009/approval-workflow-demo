@@ -42,12 +42,18 @@ jobs:
       - name: Extract Terraform Changes
         id: extract_changes
         run: |
-          # Capture the output of terraform plan
+          # Extract the lines with Terraform changes (additions, deletions, modifications)
           grep -E '(\+|\-|\~)' terraform_plan.txt > terraform_changes.txt
+          
+          # Clean up the output to make it GitHub Actions-friendly
           if [ -s "terraform_changes.txt" ]; then
+            # Format the changes for better readability
             echo "Terraform changes detected"
             cat terraform_changes.txt
-            echo "CHANGES=$(cat terraform_changes.txt)" >> $GITHUB_ENV
+            # Store the cleaned-up changes in an environment variable
+            echo "CHANGES<<EOF" >> $GITHUB_ENV
+            cat terraform_changes.txt >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
           else
             echo "No Terraform changes detected"
             echo "CHANGES=No Terraform changes detected" >> $GITHUB_ENV
@@ -98,17 +104,16 @@ jobs:
           minimum-approvals: 1
           issue-title: "Approve deployment to production"
           issue-body: |
-           Please approve or deny the deployment of the latest code to production.
-           Workflow is pending manual review.
-           URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-           Required approvers: [Harish-0012]
-           Respond "approved", "approve", "lgtm", "yes" to continue workflow or "denied", "deny", "no" to cancel.
-           
-           Terraform Changes:
-           ```
-           ${{ env.CHANGES }}
-           ```
+            Please approve or deny the deployment of the latest code to production.
+            Workflow is pending manual review.
+            URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            Required approvers: [Harish-0012]
+            Respond "approved", "approve", "lgtm", "yes" to continue workflow or "denied", "deny", "no" to cancel.
+
+            Terraform Changes:
+            ```
+            ${{ env.CHANGES }}
+            ```
 
       - name: Terraform Apply
         run: terraform apply tfplan
-
