@@ -44,8 +44,10 @@ jobs:
           if [ -s "terraform_changes.txt" ]; then
             echo "Terraform changes:"
             cat terraform_changes.txt
+            echo "CHANGES=$(cat terraform_changes.txt)" >> $GITHUB_OUTPUT
           else
             echo "No Terraform changes detected"
+            echo "CHANGES=No Terraform changes detected" >> $GITHUB_OUTPUT
           fi
         
       - name: Extract Commit Message
@@ -53,7 +55,6 @@ jobs:
         run: |
           COMMIT_MESSAGE=$(git log -1 --pretty=%B)
           echo "COMMIT_MESSAGE=$COMMIT_MESSAGE" >> $GITHUB_ENV
-
       - name: Display Full Output
         run: |
           echo "-------------------------------------------------"
@@ -83,7 +84,8 @@ jobs:
           echo "Extracted Terraform Changes Output:"
           cat terraform_changes.txt
           echo "-------------------------------------------------"
-       
+
+      # Manual approval step
       - name: Wait for approval to deploy to production
         uses: trstringer/manual-approval@v1
         with:
@@ -91,8 +93,18 @@ jobs:
           approvers: "Harish-0012"
           minimum-approvals: 1
           issue-title: "Approve deployment to production"
-          issue-body: "Please approve or deny the deployment of the latest code to production."
-          exclude-workflow-initiator-as-approver: true
-      
+          issue-body: |
+           Please approve or deny the deployment of the latest code to production.
+           Workflow is pending manual review.
+           URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+           Required approvers: [Harish-0012]
+           Respond "approved", "approve", "lgtm", "yes" to continue workflow or "denied", "deny", "no" to cancel.
+           
+           
+           Terraform Changes:
+           ```
+           ${{ steps.extract_changes.outputs.CHANGES }}
+           ```
+
       - name: Terraform Apply
         run: terraform apply tfplan
