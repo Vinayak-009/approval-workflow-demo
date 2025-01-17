@@ -88,13 +88,12 @@ jobs:
       - name: Wait for approval to deploy to production
         uses: trstringer/manual-approval@v1
         with:
-          secret: ${{ secrets.NEW_APPROVE_SECRET }}  # Use the secret token for approval
+          secret: ${{ secrets.GITHUB_TOKEN }}  # Use the secret token for approval
           approvers: Harish-0012  # Replace with real GitHub usernames or teams
           minimum-approvals: 1
           issue-title: "Approve deployment to production"
           issue-body: "Please approve or deny the deployment of the latest code to production."
           exclude-workflow-initiator-as-approver: true
-          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}  # Add the personal access token secret here
 
       - name: Terraform Apply
         run: terraform apply tfplan
