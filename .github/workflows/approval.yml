@@ -1,98 +1,31 @@
-name: Terraform Deployment with Manual Approval
+name: Manual Approval Workflow
 
+# Trigger this workflow on push to the 'main' branch
 on:
   push:
     branches:
-      - main  # Trigger on pushes to the main branch
+      - main  # The workflow will trigger on pushes to the 'main' branch
 
 jobs:
-  terraform-deploy-with-approval:
+  approval:
     runs-on: ubuntu-latest
-    permissions:
-      contents: 'read'
-      id-token: 'write'
     steps:
+      # Checkout the repository's code
       - name: Checkout Code
-        id: checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v2
 
-      - name: Configure GCP Credentials
-        id: configure_gcp
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: 'projects/554761590655/locations/global/workloadIdentityPools/new-pool/providers/github-oidc-provider'
-          service_account: 'github-wif@no-migration.iam.gserviceaccount.com'
-
-      - name: Set up Terraform
-        id: setup_terraform
-        uses: hashicorp/setup-terraform@v1
-        with:
-          terraform_version: 1.4.5
-
-      - name: Terraform Init
-        id: terraform_init
-        run: terraform init
-
-      - name: Terraform Plan
-        id: terraform_plan
-        run: terraform plan -out=tfplan | tee terraform_plan.txt
-      
-      - name: Extract Terraform Changes
-        id: extract_changes
+      # Deploy to staging (dummy step here)
+      - name: Deploy to Staging
         run: |
-          grep -E '(\+|\-|\~)' terraform_plan.txt > terraform_changes.txt
-          if [ -s "terraform_changes.txt" ]; then
-            echo "Terraform changes:"
-            cat terraform_changes.txt
-          else
-            echo "No Terraform changes detected"
-          fi
-        
-      - name: Extract Commit Message
-        id: extract_commit
-        run: |
-          COMMIT_MESSAGE=$(git log -1 --pretty=%B)
-          echo "COMMIT_MESSAGE=$COMMIT_MESSAGE" >> $GITHUB_ENV
+          echo "Deploying code to staging environment..."
 
-      - name: Display Full Output
-        run: |
-          echo "-------------------------------------------------"
-          echo "                   Workflow Summary               "
-          echo "-------------------------------------------------"
-          echo "Commit Message:"
-          echo "${{ env.COMMIT_MESSAGE }}"
-          echo "-------------------------------------------------"
-          echo "Checkout Code Step"
-          echo "Time: $(date +%Y-%m-%d-%H-%M-%S)"
-          echo "-------------------------------------------------"
-          echo "Configure GCP Credentials Step"
-          echo "Time: $(date +%Y-%m-%d-%H-%M-%S)"
-          echo "-------------------------------------------------"
-          echo "Set up Terraform Step"
-          echo "Time: $(date +%Y-%m-%d-%H-%M-%S)"
-          echo "-------------------------------------------------"
-          echo "Terraform Init Step"
-          echo "Time: $(date +%Y-%m-%d-%H-%M-%S)"
-          echo "-------------------------------------------------"
-          echo "Terraform Plan Step"
-          echo "Time: $(date +%Y-%m-%d-%H-%M-%S)"
-          echo "-------------------------------------------------"
-          echo "Terraform Plan Output:"
-          cat terraform_plan.txt
-          echo "-------------------------------------------------"
-          echo "Extracted Terraform Changes Output:"
-          cat terraform_changes.txt
-          echo "-------------------------------------------------"
-       
+      # Manual approval step
       - name: Wait for approval to deploy to production
         uses: trstringer/manual-approval@v1
         with:
-          secret: ${{ secrets.NEW_APPROVE_SECRET }}
-          approvers: "Harish-0012"
+          secret: ${{ secrets.NEW_APPROVE_SECRET }}  # Use the secret token for approval
+          approvers: Harish-0012  # Replace with real GitHub usernames or teams
           minimum-approvals: 1
           issue-title: "Approve deployment to production"
           issue-body: "Please approve or deny the deployment of the latest code to production."
           exclude-workflow-initiator-as-approver: true
-      
-      - name: Terraform Apply
-        run: terraform apply tfplan
