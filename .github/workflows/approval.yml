@@ -1,4 +1,4 @@
-name: Terraform Deployment with Commit Info and Manual Approval
+name: Terraform Deployment with Manual Approval
 
 on:
   push:
@@ -13,6 +13,9 @@ jobs:
       id-token: 'write'
     environment:
       name: production
+      # Define required reviewers for manual approval
+      reviewers:
+        - "Harish-0012"  # GitHub username of the approver
     steps:
       - name: Checkout Code
         id: checkout
@@ -85,5 +88,12 @@ jobs:
           echo "Extracted Terraform Changes Output:"
           cat terraform_changes.txt
           echo "-------------------------------------------------"
+
+      # Manual approval step
+      - name: Wait for Approval
+        uses: peter-evans/workflow-dispatch@v1
+        with:
+          workflow: wait-for-approval.yml  # Separate workflow or approval logic (if applicable)
+          
       - name: Terraform Apply
         run: terraform apply tfplan
