@@ -12,7 +12,6 @@ jobs:
       contents: 'read'
       id-token: 'write'
       issues: 'write'  # Ensure write permissions for creating issues
-
     steps:
       - name: Checkout Code
         id: checkout
@@ -50,13 +49,11 @@ jobs:
             # Format the changes for better readability
             echo "Terraform changes detected"
             cat terraform_changes.txt
-            # Store the cleaned-up changes in an environment variable
-            echo "CHANGES<<EOF" >> $GITHUB_ENV
-            cat terraform_changes.txt >> $GITHUB_ENV
-            echo "EOF" >> $GITHUB_ENV
+            # Store the cleaned-up changes in a step output variable
+            echo "CHANGES=$(cat terraform_changes.txt)" >> $GITHUB_OUTPUT
           else
             echo "No Terraform changes detected"
-            echo "CHANGES=No Terraform changes detected" >> $GITHUB_ENV
+            echo "CHANGES=No Terraform changes detected" >> $GITHUB_OUTPUT
           fi
 
       - name: Extract Commit Message
@@ -94,8 +91,7 @@ jobs:
           echo "Extracted Terraform Changes Output:"
           cat terraform_changes.txt
           echo "-------------------------------------------------"
-
-      # Manual approval step
+      
       - name: Wait for approval to deploy to production
         uses: trstringer/manual-approval@v1
         with:
@@ -112,7 +108,7 @@ jobs:
 
             Terraform Changes:
             ```
-            ${{ env.CHANGES }}
+            ${{ steps.extract_changes.outputs.CHANGES }}
             ```
 
       - name: Terraform Apply
